@@ -43,7 +43,7 @@ jobs:
           path: dist/Antigravity-Tools-Windows-x64.zip
 
   build-macos-intel:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
