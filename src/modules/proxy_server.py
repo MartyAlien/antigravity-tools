@@ -642,6 +642,14 @@ class ProxyDatabase:
                             if total_size > 0:
                                 k["points"] = f"{total_remain:.0f}/{total_size:.0f}"
                                 k["points_updated_at"] = datetime.now().isoformat()
+                            # 实时检查最低积分阈值，低于阈值自动禁用
+                            min_threshold = float(k.get("min_credits_threshold", 0) or 0)
+                            if min_threshold > 0 and total_remain <= min_threshold:
+                                old_status = k.get("status", "active")
+                                if old_status in ("active", "cooldown", "rate_limited", "exhausted"):
+                                    k["status"] = "disabled"
+                                    self._key_status_version += 1
+                                    logger.info(f"[实时阈值] Key {k.get('label', k.get('key_id',''))} 积分{total_remain:.0f}<={min_threshold:.0f}，{old_status} -> DISABLED")
                     break
             # 更新每日统计
             self._update_daily_stats("upstream", key_id, prompt_tokens, completion_tokens, total_tokens, cached_tokens, credits)
@@ -1550,7 +1558,7 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {
                 "object": "api.index",
                 "message": "Antigravity Proxy is running",
-                "version": "1.5.8",
+                "version": "1.5.9",
             })
             return
 

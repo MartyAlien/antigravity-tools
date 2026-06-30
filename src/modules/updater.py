@@ -85,7 +85,7 @@ def _fetch_github_release(timeout: int = 15) -> dict | None:
 
     返回格式与旧服务器 version.json 兼容：
     {
-        "version": "1.5.8",
+        "version": "1.5.9",
         "changelog": "...",
         "download_url": "https://github.com/.../Antigravity-Tools-Windows-x64.zip",
         "sha256": "",
@@ -102,7 +102,7 @@ def _fetch_github_release(timeout: int = 15) -> dict | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
 
-        # 从 tag_name 提取版本号 (v1.5.8 → 1.5.8)
+        # 从 tag_name 提取版本号 (v1.5.9 → 1.5.9)
         tag = data.get("tag_name", "")
         version = tag.lstrip("v").strip()
         if not version:

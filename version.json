@@ -1,20 +1,20 @@
 {
-    "version": "1.5.6",
-    "changelog": "v1.5.6 更新内容：\n\n【重大修复】彻底修复上下文异常/超限问题\n\n【模型配置】更新后重新一键配置模型，glm5.1/5.2不要勾选图片输入！！\n\n【代理优化】\n\n【新功能】\n添加账号新增「用API导入」（输入 ck_xxx + 昵称 + UID）\n批量导入支持 API Key 格式（JSON / 纯文本每行一个）\nQQ群:1025605799\n\n版本号升级至 1.5.6\nMac 版同步更新\n\n下载地址 https://wwbvx.lanzouw.com/b0fqdlz3e\n密码: 0000\nhttps://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.6",
-    "release_date": "2026-06-24",
-    "download_url": "https://wwbvx.lanzouw.com/b0fqdlz3e",
+    "version": "1.5.8",
+    "changelog": "Antigravity Tools v1.5.8 更新公告\n\n1. 新增自动更新功能，以后版本更新不用手动下载\n2. 临期优先模式修复，用完临期积分后自动切换下一个账号\n3. 积分实时递减，每次请求成功后自动扣除消耗的积分\n4. 新增最低积分和自动启用阈值自定义设置\n5. 新增上游Key永久禁用功能\n6. 修复积分明细基础分显示不正确的问题\n7. 清理无用代码，优化性能\n\nv1.5.7 更新内容：\n1. 修复API代理数据被清空的严重 bug\n2. 修复临期优先模式不生效\n3. 修复了深色模式下部分显示的异常\n\n下载地址打不开的话去群里下载 1025605799\nhttps://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.8",
+    "release_date": "2026-06-29",
+    "download_url": "https://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.8",
     "sha256": "",
     "platforms": {
         "windows": {
-            "version": "1.5.6",
-            "changelog": "v1.5.6 更新内容：\n\n【重大修复】彻底修复上下文异常/超限问题\n\n【模型配置】更新后重新一键配置模型，glm5.1/5.2不要勾选图片输入！！\n\n【代理优化】\n\n【新功能】\n添加账号新增「用API导入」（输入 ck_xxx + 昵称 + UID）\n批量导入支持 API Key 格式（JSON / 纯文本每行一个）\nQQ群:1025605799\n\n版本号升级至 1.5.6\nMac 版同步更新\n\n下载地址 https://wwbvx.lanzouw.com/b0fqdlz3e\n密码: 0000\nhttps://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.6",
-            "download_url": "https://wwbvx.lanzouw.com/b0fqdlz3e",
+            "version": "1.5.8",
+            "changelog": "Antigravity Tools v1.5.8 更新公告\n\n1. 新增自动更新功能，以后版本更新不用手动下载\n2. 临期优先模式修复，用完临期积分后自动切换下一个账号\n3. 积分实时递减，每次请求成功后自动扣除消耗的积分\n4. 新增最低积分和自动启用阈值自定义设置\n5. 新增上游Key永久禁用功能\n6. 修复积分明细基础分显示不正确的问题\n7. 清理无用代码，优化性能\n\nv1.5.7 更新内容：\n1. 修复API代理数据被清空的严重 bug\n2. 修复临期优先模式不生效\n3. 修复了深色模式下部分显示的异常\n\n下载地址打不开的话去群里下载 1025605799",
+            "download_url": "https://github.com/qinchangxv/antigravity-tools/releases/download/v1.5.8/Antigravity-Tools-Windows-x64.zip",
             "sha256": ""
         },
         "mac": {
-            "version": "1.5.6",
-            "changelog": "v1.5.6 更新内容：\n\n【重大修复】彻底修复上下文异常/超限问题\n\n【模型配置】更新后重新一键配置模型，glm5.1/5.2不要勾选图片输入！！\n\n【代理优化】\n\n【新功能】\n添加账号新增「用API导入」（输入 ck_xxx + 昵称 + UID）\n批量导入支持 API Key 格式（JSON / 纯文本每行一个）\nQQ群:1025605799\n\n版本号升级至 1.5.6\nMac 版同步更新\n\n下载地址 https://wwbvx.lanzouw.com/b0fqdlz3e\n密码: 0000\nhttps://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.6",
-            "download_url": "https://wwbvx.lanzouw.com/b0fqdlz3e",
+            "version": "1.5.8",
+            "changelog": "Antigravity Tools v1.5.8 更新公告\n\n1. 新增自动更新功能，以后版本更新不用手动下载\n2. 临期优先模式修复，用完临期积分后自动切换下一个账号\n3. 积分实时递减，每次请求成功后自动扣除消耗的积分\n4. 新增最低积分和自动启用阈值自定义设置\n5. 新增上游Key永久禁用功能\n6. 修复积分明细基础分显示不正确的问题\n7. 清理无用代码，优化性能\n\nv1.5.7 更新内容：\n1. 修复API代理数据被清空的严重 bug\n2. 修复临期优先模式不生效\n3. 修复了深色模式下部分显示的异常\n\n下载地址打不开的话去群里下载 1025605799",
+            "download_url": "https://github.com/qinchangxv/antigravity-tools/releases/tag/v1.5.8",
             "sha256": ""
         }
     }
