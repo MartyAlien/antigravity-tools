@@ -241,63 +241,71 @@ def _apply_src_only_update(zip_path: Path) -> bool:
     import subprocess
 
     try:
-        # 解压到临时目录
-        with tempfile.TemporaryDirectory(prefix="ag_src_update_") as tmp_dir:
-            tmp = Path(tmp_dir)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(tmp)
+        # [v1.6.1-fix] 不用 TemporaryDirectory，因为它在函数 return 后会自动删除，
+        # 而批处理是异步执行的，等它跑 robocopy 时临时目录已经没了。
+        # 改用手动管理的持久临时目录，批处理完成后自己清理。
+        tmp_dir = Path(tempfile.gettempdir()) / "ag_src_update"
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
 
-            # 找到解压后的 src 目录
-            extracted_src = tmp / "src"
-            if not extracted_src.exists():
-                for sub in tmp.iterdir():
-                    if sub.is_dir() and (sub / "src").exists():
-                        extracted_src = sub / "src"
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(tmp_dir)
+
+        # 找到解压后的 src 目录
+        extracted_src = tmp_dir / "src"
+        if not extracted_src.exists():
+            for sub in tmp_dir.iterdir():
+                if sub.is_dir() and (sub / "src").exists():
+                    extracted_src = sub / "src"
+                    break
+        if not extracted_src.exists():
+            logger.error("增量包中未找到 src/ 目录")
+            return False
+
+        if sys.platform == "darwin":
+            # macOS: 找到 .app 的 src 目录
+            current_exe = Path(sys.executable)
+            app_path = current_exe
+            while app_path.parent.name != "" and not app_path.name.endswith(".app"):
+                app_path = app_path.parent
+            if not app_path.name.endswith(".app"):
+                for p in current_exe.parents:
+                    if p.name.endswith(".app"):
+                        app_path = p
                         break
-            if not extracted_src.exists():
-                logger.error("增量包中未找到 src/ 目录")
+
+            src_dir = app_path / "Contents" / "Resources" / "src"
+            if not src_dir.exists():
+                logger.error(f"macOS src 目录不存在: {src_dir}")
                 return False
 
-            if sys.platform == "darwin":
-                # macOS: 找到 .app 的 src 目录
-                current_exe = Path(sys.executable)
-                app_path = current_exe
-                while app_path.parent.name != "" and not app_path.name.endswith(".app"):
-                    app_path = app_path.parent
-                if not app_path.name.endswith(".app"):
-                    for p in current_exe.parents:
-                        if p.name.endswith(".app"):
-                            app_path = p
-                            break
+            # ditto 覆盖
+            subprocess.run(["rm", "-rf", str(src_dir)], capture_output=True, timeout=30)
+            result = subprocess.run(
+                ["ditto", str(extracted_src), str(src_dir)],
+                capture_output=True, timeout=60
+            )
+            if result.returncode != 0:
+                logger.error(f"ditto 覆盖 src 失败: {result.stderr.decode(errors='replace')[:200]}")
+                return False
 
-                src_dir = app_path / "Contents" / "Resources" / "src"
-                if not src_dir.exists():
-                    logger.error(f"macOS src 目录不存在: {src_dir}")
-                    return False
+            # 清理临时目录
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            logger.info("macOS 增量更新成功")
+            return True
 
-                # ditto 覆盖
-                subprocess.run(["rm", "-rf", str(src_dir)], capture_output=True, timeout=30)
-                result = subprocess.run(
-                    ["ditto", str(extracted_src), str(src_dir)],
-                    capture_output=True, timeout=60
-                )
-                if result.returncode != 0:
-                    logger.error(f"ditto 覆盖 src 失败: {result.stderr.decode(errors='replace')[:200]}")
-                    return False
+        else:
+            # Windows: 批处理替换 _internal/src/
+            current_exe = Path(sys.executable)
+            src_dir = current_exe.parent / "_internal" / "src"
+            if not src_dir.exists():
+                logger.error(f"Windows src 目录不存在: {src_dir}")
+                return False
 
-                logger.info("macOS 增量更新成功")
-                return True
-
-            else:
-                # Windows: 批处理替换 _internal/src/
-                current_exe = Path(sys.executable)
-                src_dir = current_exe.parent / "_internal" / "src"
-                if not src_dir.exists():
-                    logger.error(f"Windows src 目录不存在: {src_dir}")
-                    return False
-
-                bat_path = Path(tempfile.gettempdir()) / "ag_src_updater.bat"
-                bat_content = f"""@echo off
+            bat_path = Path(tempfile.gettempdir()) / "ag_src_updater.bat"
+            # [v1.6.1-fix] 批处理完成后清理临时目录
+            bat_content = f"""@echo off
 chcp 65001 >nul 2>&1
 timeout /t 2 /nobreak >nul
 
@@ -310,24 +318,26 @@ timeout /t 1 /nobreak >nul
 rd /s /q "{src_dir}"
 robocopy "{extracted_src}" "{src_dir}" /E /IS /IT /NFL /NDL /NJH /NJS /nc /ns /np
 
+rd /s /q "{tmp_dir}"
+
 start "" "{current_exe}"
 
 del "%~f0"
 """
-                bat_path.write_text(bat_content, encoding="gbk", errors="replace")
+            bat_path.write_text(bat_content, encoding="gbk", errors="replace")
 
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = 0
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
 
-                subprocess.Popen(
-                    ["cmd", "/c", str(bat_path)],
-                    startupinfo=startupinfo,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
+            subprocess.Popen(
+                ["cmd", "/c", str(bat_path)],
+                startupinfo=startupinfo,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
 
-                logger.info("Windows 增量更新批处理已启动")
-                return True
+            logger.info("Windows 增量更新批处理已启动")
+            return True
 
     except Exception as e:
         logger.error(f"增量更新失败: {e}")
