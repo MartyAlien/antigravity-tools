@@ -2091,6 +2091,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                     # [v1.6.1-fix] 补充 OpenAI 兼容常用字段
                     "parallel_tool_calls", "seed", "user", "metadata",
                     "logprobs", "top_logprobs", "n",
+                    # [v1.6.1-fix] 推理模式相关字段
+                    "reasoning_effort", "thinking",
                 }
                 _removed_fields = [k for k in list(request_data.keys()) if k not in _allowed_body_fields]
                 if _removed_fields:
