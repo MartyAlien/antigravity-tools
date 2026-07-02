@@ -344,28 +344,26 @@ def _part_is_image(part: dict) -> bool:
     return False
 
 
+def _has_following_assistant(messages: list, msg_index: int) -> bool:
+    """判断某条消息后面是否已经有 assistant 回复。"""
+    for later_msg in messages[msg_index + 1:]:
+        if isinstance(later_msg, dict) and later_msg.get("role") == "assistant":
+            return True
+    return False
+
+
 def _strip_history_images_with_description(messages: list) -> list:
     """
-    [v1.6.1新增] 历史图片替换成文本描述，只保留最后一条 user 消息的图片。
+    [v1.6.1新增] 历史图片替换成文本描述。
 
     策略：
-    - 找最后一条 user 消息，它的图片保留原图
-    - 其他消息中的图片被移除，替换成「后续 assistant 回复的内容摘要」作为描述
+    - 只有"后面还没有 assistant 回复"的 user 图片消息，才保留原图
+    - 一旦后面已有 assistant 回复，说明这张图已经被识别过，图片替换成描述
     - 描述来源：该图片所在 user 消息之后最近的一条 assistant 回复文本
 
     [ROLLBACK] 注释掉调用处（搜索 _strip_history_images_with_description）即可恢复。
     """
     if not isinstance(messages, list):
-        return messages
-
-    # 找最后一条 user 消息
-    last_user_index = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], dict) and messages[i].get("role") == "user":
-            last_user_index = i
-            break
-
-    if last_user_index < 0:
         return messages
 
     new_messages = []
@@ -377,7 +375,13 @@ def _strip_history_images_with_description(messages: list) -> list:
             continue
 
         content = msg.get("content")
-        allow_images = msg_index == last_user_index and msg.get("role") == "user"
+
+        # 只有"后面还没有 assistant 回复"的 user 图片消息，才保留原图
+        # 一旦后面已有 assistant，说明这张图已经被识别过，后续替换成描述
+        allow_images = (
+            msg.get("role") == "user"
+            and not _has_following_assistant(messages, msg_index)
+        )
 
         if not isinstance(content, list):
             new_messages.append(msg)
@@ -2095,7 +2099,8 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                         del request_data[_k]
 
                 # ─── [v1.6.1-CHANGE] 历史图片替换为文本描述 ───
-                # 只保留最后一条 user 消息的图片，历史图片替换成后续 assistant 回复的摘要
+                # 后面已有 assistant 回复的 user 图片消息 → 图片替换成描述
+                # 后面还没有 assistant 回复的 user 图片消息 → 保留原图（第一次发图/最新发图）
                 # [ROLLBACK] 注释掉下面两行即可恢复（只保留 _normalize_messages_for_upstream）
                 request_data["messages"] = _strip_history_images_with_description(
                     request_data.get("messages", [])
@@ -2105,6 +2110,9 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 # 上游纯 API 模式只认 image_url 格式，input_image 会被丢弃导致"读不了图"。
                 # [ROLLBACK] 注释掉下面这行即可恢复原样透传
                 _img_normalized = _normalize_messages_for_upstream(request_data.get("messages", []))
+
+                # [v1.6.1-fix] 图片处理后重新统计，日志里显示真正发给上游的图片数
+                image_stats = _detect_multimodal_images(request_data)
 
                 # 记录请求体大小和消息数（用于排查上下文超长问题）
                 msg_count = len(request_data.get("messages", []))
