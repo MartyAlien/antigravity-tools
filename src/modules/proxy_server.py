@@ -162,6 +162,15 @@ def _image_url_from_part(part: dict):
         if isinstance(image_url, str):
             return image_url
     if part_type in ("image", "input_image"):
+        source = part.get("source")
+        if isinstance(source, dict):
+            source_type = source.get("type")
+            if source_type == "url" and isinstance(source.get("url"), str):
+                return source["url"]
+            if source_type == "base64" and isinstance(source.get("data"), str):
+                media_type = source.get("media_type") or source.get("mediaType") or "image/jpeg"
+                data = source["data"]
+                return data if data.startswith("data:") else f"data:{media_type};base64,{data}"
         url = part.get("url")
         if isinstance(url, str):
             return url
@@ -323,11 +332,22 @@ def _summarize_messages_for_log(messages: list) -> dict:
 
 
 def _summarize_request_for_error_log(request_data: dict, headers: dict, build_meta: dict) -> dict:
-    non_message_fields = {
-        key: _summarize_log_value(value)
-        for key, value in request_data.items()
-        if key != "messages"
-    }
+    non_message_fields = {}
+    for key, value in request_data.items():
+        if key == "messages":
+            continue
+        if key == "tools" and isinstance(value, list):
+            names = []
+            for tool in value[:30]:
+                if isinstance(tool, dict):
+                    names.append(tool.get("function", {}).get("name") or tool.get("name") or "<unnamed>")
+            non_message_fields[key] = {
+                "count": len(value),
+                "names": names,
+                "omitted": max(0, len(value) - len(names)),
+            }
+            continue
+        non_message_fields[key] = _summarize_log_value(value)
     header_summary = {}
     for key, value in headers.items():
         if key.lower() == "authorization":
@@ -337,9 +357,9 @@ def _summarize_request_for_error_log(request_data: dict, headers: dict, build_me
     return {
         "headers": header_summary,
         "body_fields": list(request_data.keys()),
-        "non_message_fields": non_message_fields,
-        "messages": _summarize_messages_for_log(request_data.get("messages", [])),
         "image_stats": _detect_multimodal_images(request_data),
+        "messages": _summarize_messages_for_log(request_data.get("messages", [])),
+        "non_message_fields": non_message_fields,
         "relay_meta": build_meta,
     }
 
@@ -606,15 +626,36 @@ def _build_workbuddy_relay_body(client_body: dict) -> tuple[dict, dict]:
     """
     Build the upstream body for WorkBuddy key-pool relay.
 
-    This proxy is not an SDK/Agent adapter. WorkBuddy already speaks the body
-    shape its upstream expects, so the relay should preserve the request body as
-    much as possible and only change what the proxy owns: model fallback,
-    messages validation happened earlier, and upstream streaming.
+    This proxy is not an SDK/Agent adapter. WorkBuddy already speaks most of the
+    body shape its upstream expects, so the relay preserves normal generation
+    fields and only changes fields proven risky by upstream 11133 logs or by the
+    Tencent Agent SDK/Open Platform contracts.
     """
     body = copy.deepcopy(client_body)
     body["model"] = body.get("model") or "auto"
     body["messages"] = copy.deepcopy(client_body.get("messages", []))
     body["stream"] = True
+
+    dropped_fields = []
+    for field in (
+        # Seen in real 11133 logs. The SDK exposes tools as CLI/session config,
+        # not as a raw chat-completions JSON schema array for this relay.
+        "tools",
+        "tool_choice",
+        "parallel_tool_calls",
+        # Seen in real 11133 logs against copilot.tencent.com/v2/chat/completions.
+        "stream_options",
+        "reasoning_effort",
+    ):
+        if field in body:
+            dropped_fields.append(field)
+            body.pop(field, None)
+
+    before_strip_images = _detect_multimodal_images(body)
+    body["messages"] = _strip_history_images_with_description(body.get("messages", []))
+    after_strip_images = _detect_multimodal_images(body)
+    normalized_images = _normalize_messages_for_upstream(body.get("messages", []))
+    after_normalize_images = _detect_multimodal_images(body)
 
     translated_fields = []
     if "max_completion_tokens" in client_body and "max_tokens" not in client_body:
@@ -629,8 +670,16 @@ def _build_workbuddy_relay_body(client_body: dict) -> tuple[dict, dict]:
 
     meta = {
         "mode": "workbuddy_relay",
+        "dropped_fields": dropped_fields,
         "removed_null_fields": removed_null_fields,
         "translated_fields": translated_fields,
+        "history_images_replaced": max(
+            0,
+            before_strip_images.get("image_count", 0) - after_strip_images.get("image_count", 0),
+        ),
+        "normalized_images": normalized_images,
+        "image_stats_before": before_strip_images,
+        "image_stats_after": after_normalize_images,
         "has_stream_options": "stream_options" in body,
     }
     return body, meta
@@ -2278,11 +2327,20 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 client_wants_stream = request_data.get("stream", False)
                 upstream_request_data, build_meta = _build_workbuddy_relay_body(request_data)
 
-                if build_meta["removed_null_fields"] or build_meta["translated_fields"]:
+                if (
+                    build_meta["removed_null_fields"]
+                    or build_meta["translated_fields"]
+                    or build_meta["dropped_fields"]
+                    or build_meta["history_images_replaced"]
+                    or build_meta["normalized_images"]
+                ):
                     logger.info(
                         f"[v1.6.6] WorkBuddy Relay 调整字段: "
+                        f"dropped={build_meta['dropped_fields']}; "
                         f"removed_null={build_meta['removed_null_fields']}; "
-                        f"translated={build_meta['translated_fields']}"
+                        f"translated={build_meta['translated_fields']}; "
+                        f"history_images_replaced={build_meta['history_images_replaced']}; "
+                        f"normalized_images={build_meta['normalized_images']}"
                     )
 
                 image_stats = _detect_multimodal_images(upstream_request_data)
@@ -2297,6 +2355,10 @@ class ProxyRequestHandler(BaseHTTPRequestHandler):
                 logger.info(f"[代理] v1.6.6 WorkBuddy Relay 请求 {int((time.time()-t0)*1000)}ms, model={model}, key={label}, "
                            f"messages={msg_count}, body={body_size}B ({body_size//1024}KB), "
                            f"stream={client_wants_stream}, image={has_image}, images={image_stats['image_count']}, "
+                           f"data_uri={image_stats['data_uri_count']}, max_image_chars={image_stats['max_image_chars']}, "
+                           f"dropped={build_meta['dropped_fields']}, "
+                           f"history_images_replaced={build_meta['history_images_replaced']}, "
+                           f"normalized_images={build_meta['normalized_images']}, "
                            f"mode={build_meta['mode']}, stream_options={build_meta['has_stream_options']}")
 
                 # ─── 发送请求到上游 ───
