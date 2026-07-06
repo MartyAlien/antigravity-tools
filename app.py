@@ -16,12 +16,19 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# PyInstaller 打包后，_MEIPASS 指向 _internal/ 目录
-# src/ 作为 datas 打包在 _internal/src/，需要把 _MEIPASS 加入 sys.path
+# PyInstaller 打包后，需要把包含 src/ 的目录加入 sys.path
 if getattr(sys, 'frozen', False):
     base_path = sys._MEIPASS
     if base_path not in sys.path:
         sys.path.insert(0, base_path)
+    # macOS .app bundle: datas 在 Contents/Resources/，而 _MEIPASS 指向 Contents/MacOS/
+    # 需要把 Resources 目录也加入 sys.path，否则 importlib 找不到 src
+    if sys.platform == 'darwin':
+        resources_path = os.path.normpath(
+            os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+        )
+        if resources_path not in sys.path:
+            sys.path.insert(0, resources_path)
 
 # 动态加载 src.main 模块并执行 main()
 # 不用 `from src.main import main` 是因为 PyInstaller 静态分析会跟踪 import 链
