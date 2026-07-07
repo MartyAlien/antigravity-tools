@@ -872,7 +872,7 @@ class UpdateChecker(QObject):
                     if self._src_download_url:
                         src_zip = tmp_dir / "update-src.zip"
                         logger.info(f"尝试增量更新: {self._src_download_url}")
-                        if _download_update(self._src_download_url, src_zip, _progress, timeout=60):
+                        if _download_update(self._src_download_url, src_zip, _progress, timeout=120):
                             if _apply_src_only_update(src_zip):
                                 self.update_finished.emit(True, "UPDATE_NEED_RESTART")
                                 return
