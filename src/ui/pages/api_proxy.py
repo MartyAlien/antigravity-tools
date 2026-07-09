@@ -1259,6 +1259,7 @@ class ApiProxyPage(QWidget):
                                 dk["points"] = f"{remaining:.0f}/{total:.0f}"
                                 dk["points_updated_at"] = "synced_from_account"
                     self._db._dirty = True
+                    self._db._save()
             except Exception:
                 pass
 
